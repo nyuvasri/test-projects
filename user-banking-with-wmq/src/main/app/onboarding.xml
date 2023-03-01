@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata"
+	xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" 
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+    
+
+	<flow name="post:/signup:api-config">
+        <dw:transform-message doc:name="Transform input JSON into Map and create userData variable">
+        <dw:input-payload mimeType="application/json"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+            <dw:set-variable variableName="userData"><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-variable>
+        </dw:transform-message>
+        <http:request config-ref="Identity_service_HTTP" path="/checkuser" method="GET" doc:name="Call Identity Service GET users by username and email">
+            <http:request-builder>
+                <http:query-param paramName="username" value="#[payload.username]"/>
+                <http:query-param paramName="email" value="#[payload.email]"/>
+
+
+            </http:request-builder>
+            <http:success-status-code-validator values="200,400"/>
+        </http:request>
+        <json:json-to-object-transformer doc:name="JSON to Object"/>
+        
+        <choice doc:name="Does user with the same username or email exist?">
+            <when expression="#[payload]">
+                <logger message="Login and email are available" level="INFO" doc:name="Log 'Login and email are available'"/>
+                <flow-ref name="createUsersInAuthServices" doc:name="createUsersInAuthServices"/>
+                <flow-ref name="createContactInSalesforce" doc:name="createContactInSalesforce"/>
+                <dw:transform-message doc:name="Create JSON response">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+  "message": "Registration completed successfully. You can log in with your credentials."
+}]]></dw:set-payload>
+                </dw:transform-message>
+                <set-property propertyName="http.status" value="#[message.inboundProperties.'http.status']" doc:name="set HTTP status"/>
+            </when>
+            <otherwise>
+                <logger message="Username or email is already in use" level="INFO" doc:name="Log 'Username or email already in use'"/>
+                <set-property propertyName="http.status" value="409" doc:name="HTTP status Property"/>
+                <dw:transform-message doc:name="Create JSON response">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+  "message": "Username you are trying to set is already in use. Please, choose another one."
+}]]></dw:set-payload>
+                </dw:transform-message>
+            </otherwise>
+        </choice>
+
+	</flow>
+    <flow name="createUsersInAuthServices">
+        <dw:transform-message doc:name="Create POST User request">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	username: flowVars.userData.username,
+	password: flowVars.userData.password,
+	name: flowVars.userData.name,
+	phone: flowVars.userData.phone,
+	ssn: flowVars.userData.ssn,
+	email: flowVars.userData.email,
+	gender: flowVars.userData.gender
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <object-to-byte-array-transformer doc:name="Object to Byte Array"/>
+        <scatter-gather doc:name="Scatter-Gather">
+            <http:request config-ref="Identity_service_HTTP" path="/users" method="POST" doc:name="Call Identity Service POST User"/>
+            <http:request config-ref="Identity_service_ex_HTTP" path="/users" method="POST" doc:name="Call External Identity Service POST User"/>
+        </scatter-gather>
+    </flow>
+    <flow name="createContactInSalesforce">
+        <dw:transform-message doc:name="Create POST Contact request">
+        <dw:set-payload><![CDATA[%dw 1.0
+%output application/json 
+--- 
+{
+	firstName: (flowVars.userData.name splitBy " ")[0],
+	lastName: (flowVars.userData.name splitBy " ")[1],
+	address: {
+		street: flowVars.userData.address.street_address,
+		city: flowVars.userData.address.locality,
+		zipCode: flowVars.userData.address.postal_code,
+		state: flowVars.userData.address.region,
+		country: flowVars.userData.address.country
+  	},
+	email: flowVars.userData.email
+}]]></dw:set-payload></dw:transform-message>
+        <http:request config-ref="Salesforce_system_api_HTTP" path="/contact" method="POST" doc:name="Call Salesforce system API POST Contact">
+            <http:request-builder>
+                <http:query-param paramName="email" value="#[payload.email]"/>
+            </http:request-builder>
+        </http:request>
+    </flow>
+
+
+</mule>

@@ -1,0 +1,240 @@
+#%RAML 1.0
+title: Anypoint Bank Portal Experience API
+version: v1
+baseUri: http://localhost:8081/api/
+
+types:
+
+  TransactionInfo:
+    description: Transaction Info
+    properties:
+      description: string
+      amount: string
+      currency: string
+      balance: string
+      transactionDate: datetime
+      isIncome: boolean
+
+  AllAccountsInfo:
+    properties:
+      anypointBank: BankInfo
+      registeredBanks: BankInfo[]
+
+  AccountInfo:
+    properties:
+      accountId:  string
+      amount: string
+      currency: string
+      lastTransactionDate: datetime
+
+  BankInfo:
+    properties:
+      bankName: string
+      bankId: string
+      checking: AccountInfo
+      savings: AccountInfo
+
+  Address:
+    properties:
+      formatted?: string
+      street_address: string
+      locality: string
+      region: string
+      postal_code: string
+      country: string
+
+  UserInfo:
+    properties:
+      id: string
+      gender:
+        type: string
+        enum: [male, female]
+        description: Gender property of a User
+      ssn:
+        type: string
+        pattern: ^\d{3}-?\d{2}-?\d{4}$
+        description: ssn property 
+      phone: string
+      name: string
+      username: string
+      address: Address
+
+
+traits:
+  secured:
+    headers:
+      Authorization:
+        description: |
+          Access token in encrypted JWT form obtained by using the /login endpoint. Example: "Bearer <token>"
+        required: true
+
+
+/login:
+  displayName: User Login
+  post:
+    description: Logs in the user by providing JWT access token
+    body:
+      application/x-www-form-urlencoded:
+        properties:
+          username:
+            required: true
+            description: Username
+          password:
+            required: true
+            description: Password
+    responses:
+      200:
+        body:
+          application/json:
+            example: !include session/signin-response.json
+      401:
+        body:
+          application/json:
+            example: !include session/signin-error-response.json
+
+/checkssn :
+    displayName: Check User's ssn existence
+    get:
+      queryParameters:
+        ssn:
+          type: string
+          description: SSN
+      responses:
+        200:
+          body:
+            application/json:
+              example: !include checkssn-response.json
+                            
+/user:              
+  /info/{accountId}/{bankId}:
+    is: [secured]
+    displayName: User info
+    uriParameters:
+      accountId:
+        type: string
+        description: Account ID
+      bankId:
+        type: string
+        description: Bank ID
+    get:
+      queryParameters:
+        ssn:
+          type: string
+          description: SSN
+      description: GET User info
+      headers:
+       X-Dept:
+          required: true
+          maxLength: 45
+          minLength: 1
+          pattern: ^d{3}
+       X-Tracker:
+          required: false
+          maxLength: 28
+          minLength: 3
+          pattern: ^d{2}
+      
+      responses:
+        200:
+          body:
+            application/json:
+              type: UserInfo
+              example: !include user-portal-response.json
+  /info: 
+    put:
+      description: PUT user info from Portal
+      body:
+        application/json:
+          type: UserInfo
+          example: !include user-portal-request.json
+      responses:
+        200:
+          body:
+            application/json:
+
+  /accounts:
+    is: [secured]
+    displayName: Get user's accounts info
+    get:
+      description: GET user's accounts info from AISP interfaces of banks
+      responses:
+        200:
+          body:
+            application/json:
+              type: AllAccountsInfo
+              example: !include accounts-response.json
+
+  /transactions/bank/{bankId}/account/{accountId}:
+    is: [secured]
+    uriParameters:
+      accountId:
+        type: string
+        description: Account ID
+      bankId:
+        type: string
+        description: Bank ID
+    displayName: Get transaction history of account of user
+    get:
+      description: Get transaction history of account of user from AISP interfaces of banks
+      responses:
+        200:
+          body:
+            application/json:
+              type: TransactionInfo[]
+              example: !include transactions-response.json
+
+  /register/bank/{bankId}:
+    is: [secured]
+    uriParameters:
+      bankId:
+        type: string
+        description: Bank ID
+    displayName: Register User using code retrieved from Auth Server
+    post:
+      description: Finish security dance with Auth Server using user's code and clientId and secret of registered app
+      body:
+        application/json:
+          example: !include register/register-request.json
+      responses:
+        200:
+        400:
+          body:
+            application/json:
+              example: !include register/register-error-response.json
+
+  /revoke/bank/{bankId}:
+    is: [secured]
+    uriParameters:
+      bankId:
+        type: string
+        description: Bank ID
+    displayName: Revoke User using code retrieved from Auth Server
+    post:
+      description: Finish security dance with Auth Server using user's code and clientId and secret of registered app
+      body:
+        application/json:
+          example: !include revoke/revoke-request.json
+      responses:
+        200:
+        400:
+          body:
+            application/json:
+              example: !include revoke/revoke-error-response.json
+
+
+/signup:
+  displayName: User Signup
+  post:
+    description: Signs up user
+    body:
+      application/json:
+        example: !include onboarding/signup-request.json
+    responses:
+      200:
+        body:
+          application/json:
+            example: !include onboarding/signup-response.json
+      400:
+        body:
+          application/json:
+            example: !include onboarding/signup-error-response.json

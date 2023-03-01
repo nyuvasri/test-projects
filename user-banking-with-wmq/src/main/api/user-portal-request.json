@@ -1,0 +1,17 @@
+{
+    "address": {
+        "formatted": "Main street 242, San Francisco, CA 90222, USA",
+        "street_address": "Main street 242",
+        "locality": "San Francisco",
+        "region": "California",
+        "postal_code": "90222",
+        "country": "USA"
+    },
+    "gender": "female",
+    "name": "Jane Doe",
+    "email": "janedoe@example.com",
+    "username": "jd",
+    "phone": "555-12345",
+    "ssn": "123-45-6789",
+    "id": "537cceb2-0abb-46de-ba53-e9123673ce01"
+}
